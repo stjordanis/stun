@@ -5,7 +5,7 @@
 %%% Created : 23 Aug 2009 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
-%%% Copyright (C) 2002-2017 ProcessOne, SARL. All Rights Reserved.
+%%% Copyright (C) 2002-2020 ProcessOne, SARL. All Rights Reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -140,7 +140,8 @@ wait_for_allocate(#stun{class = request,
 			  'ERROR-CODE' = stun_codec:error(420)},
 	    {stop, normal, send(State, R)};
        true ->
-	    case allocate_addr({State#state.min_port, State#state.max_port}) of
+	    case allocate_addr(State#state.relay_ip,
+			       {State#state.min_port, State#state.max_port}) of
 		{ok, RelayPort, RelaySock} ->
 		    Lifetime = time_left(State#state.life_timer),
 		    AddrPort = State#state.addr,
@@ -382,7 +383,7 @@ terminate(_Reason, _StateName, State) ->
 	    ok;
 	_RAddrPort ->
 	    ?dbg("deleting TURN allocation for ~s@~s from ~s: ~s",
-                 [Username, Realm, addr_to_str(_AddrPort),
+                 [Username, Realm, addr_to_str(AddrPort),
 		  addr_to_str(_RAddrPort)])
     end,
     if is_pid(State#state.owner) ->
@@ -432,15 +433,15 @@ time_left(TRef) ->
 
 %% Simple port randomization algorithm from
 %% draft-ietf-tsvwg-port-randomization-04
-allocate_addr({Min, Max}) ->
+allocate_addr(Addr, {Min, Max}) ->
     Count = Max - Min + 1,
     Next = Min + stun:rand_uniform(Count) - 1,
-    allocate_addr(Min, Max, Next, Count).
+    allocate_addr(Addr, Min, Max, Next, Count).
 
-allocate_addr(_Min, _Max, _Next, 0) ->
+allocate_addr(_Addr, _Min, _Max, _Next, 0) ->
     {error, eaddrinuse};
-allocate_addr(Min, Max, Next, Count) ->
-    case gen_udp:open(Next, [binary, {active, once}]) of
+allocate_addr(Addr, Min, Max, Next, Count) ->
+    case gen_udp:open(Next, [binary, inet, {ip, Addr}, {active, once}]) of
 	{ok, Sock} ->
 	    case inet:sockname(Sock) of
 		{ok, {_, Port}} ->
@@ -450,10 +451,12 @@ allocate_addr(Min, Max, Next, Count) ->
 	    end;
 	{error, eaddrinuse} ->
 	    if Next == Max ->
-		    allocate_addr(Min, Max, Min, Count-1);
+		    allocate_addr(Addr, Min, Max, Min, Count-1);
 	       true ->
-		    allocate_addr(Min, Max, Next+1, Count-1)
+		    allocate_addr(Addr, Min, Max, Next+1, Count-1)
 	    end;
+	{error, eaddrnotavail} when is_tuple(Addr) ->
+	    allocate_addr(any, Min, Max, Next, Count);
 	Err ->
 	    Err
     end.

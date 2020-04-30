@@ -5,7 +5,7 @@
 %%% Created :  8 Aug 2009 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
-%%% Copyright (C) 2002-2017 ProcessOne, SARL. All Rights Reserved.
+%%% Copyright (C) 2002-2020 ProcessOne, SARL. All Rights Reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -241,9 +241,10 @@ process(#state{auth = user} = State,
 		    Key = {User, Realm, Pass},
 		    case stun_codec:check_integrity(Msg, Key) of
 			true ->
-			    ?dbg("accepted long-term STUN authentication "
-                                 "for ~s@~s from ~s",
-                                 [User, Realm, addr_to_str(State#state.peer)]),
+			    error_logger:info_msg(
+			      "accepted long-term STUN authentication "
+			      "for ~s@~s from ~s",
+			      [User, Realm, addr_to_str(State#state.peer)]),
 			    process(NewState, Msg, Key);
 			false ->
 			    error_logger:info_msg(
